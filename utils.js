@@ -25,16 +25,15 @@ function filenameFromUrl(url, extension) {
 
 function imageType(data) {
   const b = data instanceof Uint8Array ? data : new Uint8Array(data);
-  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[b.length - 2] === 0xff && b[b.length - 1] === 0xd9) return 'jpg';
+  // JPEG encoders can append padding after the end-of-image marker.
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
   if (b.length >= 24 && b[0] === 137 && b[1] === 80 && b[2] === 78 && b[3] === 71 &&
     b[4] === 13 && b[5] === 10 && b[6] === 26 && b[7] === 10 &&
-    b[12] === 73 && b[13] === 72 && b[14] === 68 && b[15] === 82 &&
-    b[b.length - 8] === 73 && b[b.length - 7] === 69 && b[b.length - 6] === 78 && b[b.length - 5] === 68 &&
-    b[b.length - 4] === 0xae && b[b.length - 3] === 0x42 && b[b.length - 2] === 0x60 && b[b.length - 1] === 0x82) return 'png';
+    b[12] === 73 && b[13] === 72 && b[14] === 68 && b[15] === 82) return 'png';
   if (b.length >= 20 && String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' &&
     String.fromCharCode(...b.subarray(8, 12)) === 'WEBP' &&
-    (b[4] | b[5] << 8 | b[6] << 16 | b[7] << 24) >>> 0 === b.length - 8 &&
-    ['VP8 ', 'VP8L', 'VP8X'].includes(String.fromCharCode(...b.subarray(12, 16)))) return 'webp';
+    ['VP8 ', 'VP8L', 'VP8X'].includes(String.fromCharCode(...b.subarray(12, 16))) &&
+    ((b[4] | b[5] << 8 | b[6] << 16 | b[7] << 24) >>> 0) <= b.length - 8) return 'webp';
   return null;
 }
 

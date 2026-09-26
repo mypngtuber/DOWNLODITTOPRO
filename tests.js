@@ -20,6 +20,10 @@ async function main() {
   assert.equal(imageType(jpg), 'jpg');
   assert.equal(imageType(png), 'png');
   assert.equal(imageType(webp), 'webp');
+  // Some valid encoders leave trailing padding after the image payload.
+  assert.equal(imageType(Uint8Array.from([...jpg, 0, 0])), 'jpg');
+  assert.equal(imageType(Uint8Array.from([...png, 0, 0])), 'png');
+  assert.equal(imageType(Uint8Array.from([...webp, 0, 0])), 'webp');
   assert.equal(imageType(Uint8Array.from([60, 104, 116, 109, 108, 62])), null);
   assert.equal(filenameFromUrl(new URL('https://site.test/image?id=123'), 'jpg'), 'image.jpg');
   assert.equal(filenameFromUrl(new URL('https://site.test/cat.jpeg'), 'jpg'), 'cat.jpeg');
@@ -35,12 +39,26 @@ async function main() {
       global.fetch = async () => response(bytes, mime);
       assert.equal((await download('https://site.test/image?id=123')).extension, extension);
     }
+    global.fetch = async () => response(jpg, 'application/octet-stream');
+    assert.equal((await download('https://site.test/image')).extension, 'jpg');
+    global.fetch = async () => ({ ...response(png, 'image/png'), body: { getReader: () => {
+      let called = false;
+      return { read: async () => {
+        if (called) return { done: true };
+        called = true;
+        return { done: false, value: png.buffer };
+      } };
+    } } });
+    assert.equal((await download('https://site.test/stream')).extension, 'png');
     global.fetch = async () => response(jpg, 'image/jpeg', 404);
     await rejectsTitle(() => download('https://site.test/404.jpg'), 'Download failed');
     global.fetch = async () => response(jpg, 'text/html');
     await rejectsTitle(() => download('https://site.test/html.jpg'), 'Unsupported format');
     global.fetch = async () => response(png, 'image/jpeg');
     await rejectsTitle(() => download('https://site.test/mismatch.jpg'), 'Download failed');
+    global.fetch = async () => response(Uint8Array.from([60, 104, 116, 109, 108, 62]), '');
+    await assert.rejects(() => download('https://site.test/page'), error =>
+      error.title === 'Download failed' && error.message.includes('6 bytes') && error.message.includes('3c 68'));
     global.fetch = async () => { throw new Error('offline'); };
     await rejectsTitle(() => download('https://site.test/offline.jpg'), 'Download failed');
     global.fetch = async () => ({ ...response(jpg, 'image/jpeg'), headers: { get: key => key === 'content-length' ? '104857601' : 'image/jpeg' } });
